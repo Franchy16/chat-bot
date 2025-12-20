@@ -1,20 +1,27 @@
 {
   "name": "chatbot",
   "version": "1.0.0",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "server": "node src/api/index.js"
+    "server": "node src/api/index.js",
+    "dev": "node --watch src/api/index.js"
   },
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Chatbot tư vấn học tập cho trường đại học sử dụng Google Gemini AI",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "fuse": "^0.12.1",
     "fuse.js": "^7.1.0",
-    "openai": "^6.9.1"
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.0.2",
+    "openai": "^6.9.1",
+    "xlsx": "^0.18.5"
   }
 }

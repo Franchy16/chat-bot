@@ -1,0 +1,75 @@
+============================================
+🤖 CHATBOT TƯ VẤN HỌC TẬP - HƯỚNG DẪN NHANH
+============================================
+
+📦 CÀI ĐẶT:
+-----------
+1. npm install
+
+⚙️ CẤU HÌNH:
+-----------
+1. Mở file .env
+2. Thay GEMINI_API_KEY bằng API key của bạn
+   (Lấy tại: https://makersuite.google.com/app/apikey)
+
+🚀 CHẠY ỨNG DỤNG:
+----------------
+1. npm run server
+2. Mở trình duyệt: http://localhost:8080
+
+✨ TÍNH NĂNG:
+------------
+✅ Chat với AI (Google Gemini)
+✅ Tự động học và lưu câu hỏi/trả lời
+✅ Tìm kiếm thông minh (Fuzzy Search)
+✅ Giao diện đẹp, responsive
+✅ Lưu lịch sử chat
+
+📂 CẤU TRÚC:
+-----------
+src/
+  ├── api/index.js      → Backend API
+  └── database/db.json  → Knowledge Base
+
+public/
+  ├── index.html        → Giao diện
+  ├── style.css         → Styles
+  └── script.js         → Logic
+
+🎯 SỬ DỤNG:
+----------
+1. Nhập câu hỏi vào ô chat
+2. Nhấn Enter hoặc click nút gửi
+3. Bot sẽ trả lời từ Database hoặc AI
+
+🔧 TÙY CHỈNH:
+------------
+- Thay đổi màu sắc: public/style.css (CSS variables)
+- Thay đổi AI model: src/api/index.js (model name)
+- Điều chỉnh fuzzy search: src/api/index.js (threshold)
+
+⚠️ LƯU Ý:
+---------
+- Không commit file .env lên Git
+- API key miễn phí có giới hạn
+- Cần kết nối internet để chat
+
+📱 RESPONSIVE:
+-------------
+Giao diện tự động tối ưu cho:
+- Desktop
+- Tablet
+- Mobile
+
+🎨 GIAO DIỆN:
+------------
+- Gradient đẹp mắt
+- Animation mượt mà
+- Typing indicator
+- Suggestions chips
+- Character counter
+
+============================================
+         🎓 Chúc bạn code vui vẻ! 🎓
+============================================
+

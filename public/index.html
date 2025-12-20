@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Tư Vấn Học Tập - Đại Học</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="chat-header">
+            <div class="header-left">
+                <div class="bot-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="header-info">
+                    <h2>Chatbot Tư Vấn Học Tập</h2>
+                    <span class="status">
+                        <span class="status-dot"></span>
+                        Đang hoạt động
+                    </span>
+                </div>
+            </div>
+            <div class="header-right">
+                <a href="/login.html" class="admin-link" title="Trang quản trị">
+                    <i class="fas fa-shield-alt"></i>
+                </a>
+                <button class="clear-btn" id="clearChat" title="Xóa lịch sử chat">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat Messages Area -->
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot-message">
+                <div class="message-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="message-content">
+                    <p>Xin chào! 👋 Tôi là trợ lý AI của trường đại học.</p>
+                    <p>Tôi có thể giúp bạn về:</p>
+                    <ul>
+                        <li>📚 Thông tin học tập và chương trình đào tạo</li>
+                        <li>📅 Lịch học và lịch thi</li>
+                        <li>📝 Đăng ký môn học</li>
+                        <li>💯 Điểm số và kết quả học tập</li>
+                        <li>🏫 Thông tin về khoa, phòng ban</li>
+                        <li>❓ Các câu hỏi khác về trường</li>
+                    </ul>
+                    <p>Bạn có thắc mắc gì không?</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Typing Indicator -->
+        <div class="typing-indicator" id="typingIndicator" style="display: none;">
+            <div class="message bot-message">
+                <div class="message-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="message-content">
+                    <div class="typing-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="chat-input">
+            <div class="input-wrapper">
+                <textarea 
+                    id="messageInput" 
+                    placeholder="Nhập câu hỏi của bạn..." 
+                    rows="1"
+                    maxlength="500"
+                ></textarea>
+                <div class="input-actions">
+                    <button class="attach-btn" title="Đính kèm file (Chưa hỗ trợ)">
+                        <i class="fas fa-paperclip"></i>
+                    </button>
+                    <button class="send-btn" id="sendBtn" title="Gửi tin nhắn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="input-footer">
+                <small><span id="charCount">0</span>/500 ký tự</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Suggestions -->
+    <div class="suggestions" id="suggestions">
+        <h4>💡 Gợi ý câu hỏi:</h4>
+        <div class="suggestion-chips">
+            <button class="suggestion-chip">Lịch học tuần này như thế nào?</button>
+            <button class="suggestion-chip">Cách đăng ký môn học?</button>
+            <button class="suggestion-chip">Học phí học kỳ này là bao nhiêu?</button>
+            <button class="suggestion-chip">Thời gian nghỉ tết là khi nào?</button>
+            <button class="suggestion-chip">Làm sao để xem điểm?</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Quản lý Câu trả lời</title>
+    <link rel="stylesheet" href="admin-style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="admin-header">
+        <div class="header-content">
+            <div class="header-left">
+                <i class="fas fa-shield-alt"></i>
+                <h1>Admin Panel</h1>
+            </div>
+            <div class="header-right">
+                <div class="user-info">
+                    <i class="fas fa-user-circle"></i>
+                    <span id="userInfo">Admin</span>
+                </div>
+                <button class="btn-logout" onclick="logout()" title="Đăng xuất">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Đăng xuất
+                </button>
+                <a href="/" class="btn-back" title="Quay về Chatbot">
+                    <i class="fas fa-comments"></i>
+                    Chatbot
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="admin-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-section="knowledge">
+                    <i class="fas fa-brain"></i>
+                    <span>Câu trả lời</span>
+                </a>
+                <a href="#" class="nav-item" data-section="stats">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Thống kê</span>
+                </a>
+                <a href="#" class="nav-item" data-section="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Cài đặt</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Knowledge Base Section -->
+            <section id="knowledge-section" class="content-section active">
+                <!-- Actions Bar -->
+                <div class="actions-bar">
+                    <div class="left-actions">
+                        <button class="btn btn-primary" id="addBtn">
+                            <i class="fas fa-plus"></i>
+                            Thêm mới
+                        </button>
+                        <button class="btn btn-secondary" id="refreshBtn">
+                            <i class="fas fa-sync"></i>
+                            Làm mới
+                        </button>
+                        <div class="btn-group">
+                            <button class="btn btn-success" id="exportBtn" title="Export to Excel">
+                                <i class="fas fa-file-excel"></i>
+                                Export Excel
+                            </button>
+                            <button class="btn btn-success" id="importBtn" title="Import from Excel">
+                                <i class="fas fa-file-upload"></i>
+                                Import Excel
+                            </button>
+                            <button class="btn btn-secondary" id="downloadTemplateBtn" title="Download Template">
+                                <i class="fas fa-download"></i>
+                                Template
+                            </button>
+                        </div>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
+                    </div>
+                    <div class="right-actions">
+                        <div class="search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="searchInput" placeholder="Tìm kiếm câu hỏi...">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-cards">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #3b82f6;">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalCount">0</h3>
+                            <p>Tổng câu trả lời</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #10b981;">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="todayCount">0</h3>
+                            <p>Thêm hôm nay</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #f59e0b;">
+                            <i class="fas fa-edit"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="updatedCount">0</h3>
+                            <p>Đã cập nhật</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Knowledge Table -->
+                <div class="table-container">
+                    <table class="knowledge-table">
+                        <thead>
+                            <tr>
+                                <th width="5%">#</th>
+                                <th width="30%">Câu hỏi</th>
+                                <th width="45%">Câu trả lời</th>
+                                <th width="10%">Ngày tạo</th>
+                                <th width="10%">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="knowledgeTableBody">
+                            <tr class="loading-row">
+                                <td colspan="5">
+                                    <div class="loading">
+                                        <i class="fas fa-spinner fa-spin"></i>
+                                        Đang tải dữ liệu...
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="empty-state" style="display: none;">
+                    <i class="fas fa-inbox"></i>
+                    <h3>Chưa có câu trả lời nào</h3>
+                    <p>Nhấn nút "Thêm mới" để tạo câu trả lời đầu tiên</p>
+                </div>
+            </section>
+
+            <!-- Stats Section -->
+            <section id="stats-section" class="content-section">
+                <div class="section-header">
+                    <h2>Thống kê</h2>
+                </div>
+                <div class="coming-soon">
+                    <i class="fas fa-chart-line"></i>
+                    <h3>Đang phát triển</h3>
+                    <p>Tính năng thống kê sẽ sớm được cập nhật</p>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section id="settings-section" class="content-section">
+                <div class="section-header">
+                    <h2>Cài đặt</h2>
+                </div>
+                <div class="coming-soon">
+                    <i class="fas fa-tools"></i>
+                    <h3>Đang phát triển</h3>
+                    <p>Tính năng cài đặt sẽ sớm được cập nhật</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal: Add/Edit -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Thêm câu trả lời mới</h2>
+                <button class="close-btn" id="closeModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="knowledgeForm">
+                <input type="hidden" id="editId">
+                
+                <div class="form-group">
+                    <label for="keyword">
+                        <i class="fas fa-question-circle"></i>
+                        Câu hỏi <span class="required">*</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="keyword" 
+                        placeholder="VD: Lịch học tuần này như thế nào?"
+                        required
+                        maxlength="200"
+                    >
+                    <small class="help-text">Câu hỏi mà sinh viên thường hỏi</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="answer">
+                        <i class="fas fa-comment-dots"></i>
+                        Câu trả lời <span class="required">*</span>
+                    </label>
+                    <textarea 
+                        id="answer" 
+                        rows="8" 
+                        placeholder="VD: 📅 Lịch học tuần này:&#10;- Thứ 2: Toán cao cấp..."
+                        required
+                        maxlength="2000"
+                    ></textarea>
+                    <small class="help-text">
+                        Câu trả lời chi tiết. Có thể dùng emoji và xuống dòng
+                        <span id="charCounter">0/2000</span>
+                    </small>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelBtn">
+                        <i class="fas fa-times"></i>
+                        Hủy
+                    </button>
+                    <button type="submit" class="btn btn-primary" id="saveBtn">
+                        <i class="fas fa-save"></i>
+                        Lưu lại
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Delete Confirmation -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Xác nhận xóa</h2>
+                <button class="close-btn" id="closeDeleteModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="delete-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Bạn có chắc muốn xóa câu trả lời này?</p>
+                    <p class="warning-text">Hành động này không thể hoàn tác!</p>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" id="cancelDeleteBtn">
+                    Hủy
+                </button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                    <i class="fas fa-trash"></i>
+                    Xóa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Custom Confirm/Alert Modal -->
+    <div id="customModal" class="modal">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2 id="customModalTitle">Xác nhận</h2>
+                <button class="close-btn" id="closeCustomModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="customModalIcon" class="custom-modal-icon"></div>
+                <p id="customModalMessage"></p>
+                <div id="customModalDetails" class="custom-modal-details" style="display: none;"></div>
+            </div>
+            <div class="form-actions" id="customModalActions">
+                <button type="button" class="btn btn-secondary" id="customModalCancel">
+                    Hủy
+                </button>
+                <button type="button" class="btn btn-primary" id="customModalConfirm">
+                    Xác nhận
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="admin-script.js"></script>
+</body>
+</html>
+

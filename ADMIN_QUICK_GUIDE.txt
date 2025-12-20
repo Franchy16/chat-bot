@@ -1,0 +1,160 @@
+================================================================
+     🛡️ ADMIN PANEL - HƯỚNG DẪN NHANH CHO QUẢN TRỊ VIÊN
+================================================================
+
+📍 TRUY CẬP
+-----------
+URL: http://localhost:8080/admin.html
+Hoặc: Click icon 🛡️ ở góc phải chatbot
+
+================================================================
+
+➕ THÊM CÂU TRẢ LỜI MỚI
+------------------------
+
+1. Click nút [➕ Thêm mới]
+2. Nhập câu hỏi:
+   VD: "Làm thẻ sinh viên ở đâu?"
+   
+3. Nhập câu trả lời:
+   VD: 
+   🎴 Làm thẻ sinh viên:
+   📍 Địa điểm: Phòng CTSV - Tòa B, tầng 1
+   ⏰ Thời gian: 7h30 - 16h30 (T2-T6)
+   💰 Phí: 50.000 VNĐ
+   
+4. Click [💾 Lưu lại]
+
+================================================================
+
+✏️ SỬA CÂU TRẢ LỜI
+--------------------
+
+1. Tìm dòng cần sửa trong bảng
+2. Click nút [✏️]
+3. Cập nhật thông tin
+4. Click [💾 Lưu lại]
+
+================================================================
+
+🗑️ XÓA CÂU TRẢ LỜI
+--------------------
+
+1. Click nút [🗑️] ở dòng muốn xóa
+2. Click [Xóa] để xác nhận
+⚠️ Không thể hoàn tác!
+
+================================================================
+
+🔍 TÌM KIẾM
+-----------
+
+Nhập từ khóa vào ô tìm kiếm
+→ Tìm trong cả câu hỏi và câu trả lời
+→ Kết quả hiện ngay khi gõ
+
+================================================================
+
+📊 THỐNG KÊ
+-----------
+
+3 chỉ số trên dashboard:
+• Tổng câu trả lời
+• Thêm hôm nay
+• Đã cập nhật
+
+================================================================
+
+💡 MẸO HAY
+----------
+
+1. SỬ DỤNG EMOJI
+   📅 Lịch    📚 Học tập   💰 Tiền
+   📍 Địa chỉ  ⏰ Giờ      📞 Liên hệ
+   ✅ Yes     ❌ No       🎓 Tốt nghiệp
+
+2. CẤU TRÚC RÕ RÀNG
+   - Dùng đầu dòng
+   - Xuống dòng rõ ràng
+   - Thông tin cụ thể
+
+3. THÔNG TIN ĐẦY ĐỦ
+   ✅ Địa chỉ: Tòa A, Tầng 2, Phòng 201
+   ✅ Thời gian: 7h30 - 16h30 (T2-T6)
+   ✅ Liên hệ: 024.xxxx.xxxx
+   
+   ❌ Ở tòa A (không rõ)
+   ❌ Giờ hành chính (mơ hồ)
+
+================================================================
+
+⌨️ PHÍM TẮT
+-----------
+
+• ESC: Đóng modal
+• Ctrl + S: Lưu (khi đang mở modal)
+
+================================================================
+
+🐛 GẶP VẤN ĐỀ?
+--------------
+
+Lỗi: "Lỗi kết nối server"
+→ Kiểm tra server đang chạy: npm run server
+
+Lỗi: "Thiếu keyword hoặc answer"
+→ Điền đầy đủ 2 trường có dấu *
+
+Không thấy dữ liệu:
+→ Click [🔄 Làm mới]
+
+================================================================
+
+🔄 WORKFLOW KHUYẾN NGHỊ
+-----------------------
+
+HÀNG NGÀY:
+1. Vào Admin Panel
+2. Kiểm tra câu hỏi mới (từ AI auto-save)
+3. Chỉnh sửa cho chính xác
+4. Xóa câu trả lời spam/sai
+
+HÀNG TUẦN:
+1. Cập nhật lịch học/thi
+2. Cập nhật học phí nếu có
+3. Thêm câu hỏi thường gặp mới
+4. Backup file db.json
+
+HÀNG THÁNG:
+1. Review toàn bộ database
+2. Xóa thông tin lỗi thời
+3. Tối ưu câu trả lời
+
+================================================================
+
+✅ CHECKLIST TRƯỚC KHI PUBLISH
+------------------------------
+
+□ Kiểm tra chính tả
+□ Thông tin còn cập nhật?
+□ Số điện thoại đúng?
+□ Link website hoạt động?
+□ Địa chỉ chính xác?
+□ Thời gian đúng?
+□ Học phí mới nhất?
+
+================================================================
+
+📞 HỖ TRỢ
+---------
+
+Tài liệu chi tiết: ADMIN_GUIDE.md
+Hướng dẫn tổng quan: README.md
+
+================================================================
+
+           🎯 NHIỆM VỤ: Quản lý Knowledge Base
+           🎓 MỤC TIÊU: Hỗ trợ sinh viên tốt nhất
+
+================================================================
+
