@@ -160,10 +160,79 @@
                 <div class="section-header">
                     <h2>Thống kê</h2>
                 </div>
-                <div class="coming-soon">
-                    <i class="fas fa-chart-line"></i>
-                    <h3>Đang phát triển</h3>
-                    <p>Tính năng thống kê sẽ sớm được cập nhật</p>
+
+                <div class="actions-bar">
+                    <div class="left-actions">
+                        <button class="btn btn-secondary" id="refreshStatsBtn">
+                            <i class="fas fa-sync"></i>
+                            Làm mới báo cáo
+                        </button>
+                    </div>
+                </div>
+
+                <div class="stats-cards">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #3b82f6;">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="statsTotal">0</h3>
+                            <p>Tổng câu trả lời</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #10b981;">
+                            <i class="fas fa-plus-circle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="statsCreated14">0</h3>
+                            <p>Thêm mới (14 ngày)</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #f59e0b;">
+                            <i class="fas fa-edit"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="statsUpdated14">0</h3>
+                            <p>Cập nhật (14 ngày)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container" style="margin-bottom: 20px;">
+                    <div style="padding: 15px; border-bottom: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                        <strong>Biểu đồ 14 ngày (Thêm mới / Cập nhật)</strong>
+                        <small style="color: var(--text-light);">Đơn vị: số câu trả lời</small>
+                    </div>
+                    <div style="padding: 15px;">
+                        <canvas id="statsChart" height="110"></canvas>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div style="padding: 15px; border-bottom: 1px solid var(--border-color);">
+                        <strong>Top câu trả lời dài nhất (gợi ý cần rút gọn)</strong>
+                    </div>
+                    <table class="knowledge-table">
+                        <thead>
+                            <tr>
+                                <th width="10%">#</th>
+                                <th width="70%">Câu hỏi</th>
+                                <th width="20%">Độ dài</th>
+                            </tr>
+                        </thead>
+                        <tbody id="statsLongestTableBody">
+                            <tr class="loading-row">
+                                <td colspan="3">
+                                    <div class="loading">
+                                        <i class="fas fa-spinner fa-spin"></i>
+                                        Đang tải dữ liệu...
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </section>
 
@@ -172,10 +241,83 @@
                 <div class="section-header">
                     <h2>Cài đặt</h2>
                 </div>
-                <div class="coming-soon">
-                    <i class="fas fa-tools"></i>
-                    <h3>Đang phát triển</h3>
-                    <p>Tính năng cài đặt sẽ sớm được cập nhật</p>
+
+                <div class="table-container">
+                    <div style="padding: 15px; border-bottom: 1px solid var(--border-color);">
+                        <strong>Cấu hình hệ thống</strong>
+                        <div style="color: var(--text-light); font-size: 13px; margin-top: 5px;">
+                            Lưu vào <code>src/database/settings.json</code>. Thay đổi có hiệu lực ngay.
+                        </div>
+                    </div>
+                    <form id="settingsForm" style="padding: 20px;">
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-robot"></i>
+                                AI Enabled
+                            </label>
+                            <select id="settingAiEnabled">
+                                <option value="true">Bật</option>
+                                <option value="false">Tắt (chỉ trả lời từ Database)</option>
+                            </select>
+                            <small class="help-text">Tắt AI sẽ không gọi Gemini khi không tìm thấy trong DB.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-microchip"></i>
+                                Model
+                            </label>
+                            <input type="text" id="settingAiModel" placeholder="VD: gemini-3-pro-preview" maxlength="100">
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-scroll"></i>
+                                System instruction
+                            </label>
+                            <textarea id="settingSystemInstruction" rows="5" maxlength="2000"></textarea>
+                            <small class="help-text">Prompt hệ thống cho chatbot.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-search"></i>
+                                Fuzzy threshold (0..1)
+                            </label>
+                            <input type="number" id="settingFuzzyThreshold" min="0" max="1" step="0.01">
+                            <small class="help-text">0 = khớp chặt, 1 = khớp lỏng (dễ match sai).</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-file-upload"></i>
+                                Import: Max file size (MB)
+                            </label>
+                            <input type="number" id="settingImportMaxMb" min="1" max="20" step="1">
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-copy"></i>
+                                Import: Skip duplicates
+                            </label>
+                            <select id="settingImportSkipDuplicates">
+                                <option value="true">Bỏ qua (skip)</option>
+                                <option value="false">Ghi đè (upsert)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-actions" style="padding: 0; border-top: none; justify-content: flex-start;">
+                            <button type="button" class="btn btn-secondary" id="reloadSettingsBtn">
+                                <i class="fas fa-sync"></i>
+                                Nạp lại
+                            </button>
+                            <button type="submit" class="btn btn-primary" id="saveSettingsBtn">
+                                <i class="fas fa-save"></i>
+                                Lưu cài đặt
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </section>
         </main>

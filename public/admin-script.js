@@ -1,6 +1,16 @@
 // ========== Configuration ==========
-const API_URL = 'http://localhost:8080/api/knowledge';
-const API_BASE = 'http://localhost:8080/api';
+// Auto detect API URL based on current location
+const getApiBase = () => {
+    // If accessing from localhost, use localhost
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        return 'http://localhost:8080/api';
+    }
+    // Otherwise use current origin (for mobile/remote access)
+    return `${window.location.protocol}//${window.location.hostname}:8080/api`;
+};
+
+const API_BASE = getApiBase();
+const API_URL = `${API_BASE}/knowledge`;
 
 // ========== Authentication ==========
 let authToken = null;
@@ -95,6 +105,25 @@ const cancelBtn = document.getElementById('cancelBtn');
 const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
 const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
 
+// Stats section elements
+const refreshStatsBtn = document.getElementById('refreshStatsBtn');
+const statsTotal = document.getElementById('statsTotal');
+const statsCreated14 = document.getElementById('statsCreated14');
+const statsUpdated14 = document.getElementById('statsUpdated14');
+const statsLongestTableBody = document.getElementById('statsLongestTableBody');
+const statsChartCanvas = document.getElementById('statsChart');
+
+// Settings section elements
+const settingsForm = document.getElementById('settingsForm');
+const reloadSettingsBtn = document.getElementById('reloadSettingsBtn');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const settingAiEnabled = document.getElementById('settingAiEnabled');
+const settingAiModel = document.getElementById('settingAiModel');
+const settingSystemInstruction = document.getElementById('settingSystemInstruction');
+const settingFuzzyThreshold = document.getElementById('settingFuzzyThreshold');
+const settingImportMaxMb = document.getElementById('settingImportMaxMb');
+const settingImportSkipDuplicates = document.getElementById('settingImportSkipDuplicates');
+
 // Form inputs
 const editIdInput = document.getElementById('editId');
 const keywordInput = document.getElementById('keyword');
@@ -117,6 +146,8 @@ const contentSections = document.querySelectorAll('.content-section');
 // ========== State ==========
 let knowledgeData = [];
 let deleteId = null;
+let statsLoadedOnce = false;
+let settingsLoadedOnce = false;
 
 // ========== Initialize ==========
 document.addEventListener('DOMContentLoaded', () => {
@@ -143,6 +174,13 @@ function setupEventListeners() {
     cancelBtn.addEventListener('click', closeModalHandler);
     cancelDeleteBtn.addEventListener('click', closeDeleteModalHandler);
     confirmDeleteBtn.addEventListener('click', confirmDelete);
+
+    // Stats
+    if (refreshStatsBtn) refreshStatsBtn.addEventListener('click', loadStats);
+
+    // Settings
+    if (settingsForm) settingsForm.addEventListener('submit', saveSettings);
+    if (reloadSettingsBtn) reloadSettingsBtn.addEventListener('click', loadSettings);
 
     // Form
     knowledgeForm.addEventListener('submit', handleSubmit);
@@ -176,6 +214,242 @@ function switchSection(sectionName) {
 
     document.querySelector(`[data-section="${sectionName}"]`).classList.add('active');
     document.getElementById(`${sectionName}-section`).classList.add('active');
+
+    if (sectionName === 'stats') {
+        loadStats();
+    }
+
+    if (sectionName === 'settings') {
+        loadSettings();
+    }
+}
+
+// ========== STATS (Báo cáo) ==========
+async function loadStats() {
+    try {
+        if (!statsTotal) return;
+        if (statsLoadedOnce && !document.getElementById('stats-section')?.classList.contains('active')) return;
+
+        if (refreshStatsBtn) {
+            refreshStatsBtn.disabled = true;
+            refreshStatsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải...';
+        }
+
+        // Loading placeholders
+        statsLongestTableBody.innerHTML = `
+            <tr class="loading-row">
+                <td colspan="3">
+                    <div class="loading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        Đang tải dữ liệu...
+                    </div>
+                </td>
+            </tr>
+        `;
+
+        const response = await fetch(`${API_BASE}/stats`, { headers: getAuthHeaders() });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || 'Stats error');
+
+        const data = result.data;
+        statsTotal.textContent = data.totals.total ?? 0;
+        const created14 = (data.chart?.created || []).reduce((a, b) => a + b, 0);
+        const updated14 = (data.chart?.updated || []).reduce((a, b) => a + b, 0);
+        statsCreated14.textContent = created14;
+        statsUpdated14.textContent = updated14;
+
+        renderStatsChart(data.chart);
+        renderLongestAnswersTable(data.topLongestAnswers || []);
+
+        statsLoadedOnce = true;
+    } catch (e) {
+        console.error('Stats error:', e);
+        showToast('Lỗi khi tải báo cáo', 'error');
+    } finally {
+        if (refreshStatsBtn) {
+            refreshStatsBtn.disabled = false;
+            refreshStatsBtn.innerHTML = '<i class="fas fa-sync"></i> Làm mới báo cáo';
+        }
+    }
+}
+
+function renderLongestAnswersTable(rows) {
+    if (!statsLongestTableBody) return;
+    if (!rows.length) {
+        statsLongestTableBody.innerHTML = `
+            <tr>
+                <td colspan="3" style="padding:20px; color: var(--text-light);">Chưa có dữ liệu</td>
+            </tr>
+        `;
+        return;
+    }
+
+    statsLongestTableBody.innerHTML = rows.map((r, idx) => `
+        <tr>
+            <td>${idx + 1}</td>
+            <td class="keyword-cell">${escapeHtml(r.keyword || '')}</td>
+            <td class="date-cell">${r.len ?? 0}</td>
+        </tr>
+    `).join('');
+}
+
+function renderStatsChart(chart) {
+    if (!statsChartCanvas) return;
+    const ctx = statsChartCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const days = chart?.days || [];
+    const created = chart?.created || [];
+    const updated = chart?.updated || [];
+
+    // clear
+    ctx.clearRect(0, 0, statsChartCanvas.width, statsChartCanvas.height);
+
+    // handle HiDPI
+    const dpr = window.devicePixelRatio || 1;
+    const rect = statsChartCanvas.getBoundingClientRect();
+    statsChartCanvas.width = Math.floor(rect.width * dpr);
+    statsChartCanvas.height = Math.floor(rect.height * dpr);
+    ctx.scale(dpr, dpr);
+
+    const w = rect.width;
+    const h = rect.height;
+    const padding = 20;
+    const chartH = h - padding * 2;
+    const chartW = w - padding * 2;
+
+    const maxV = Math.max(1, ...created, ...updated);
+    const n = Math.max(days.length, 1);
+    const groupW = chartW / n;
+    const barW = Math.max(2, groupW * 0.35);
+
+    // axes
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.beginPath();
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, padding + chartH);
+    ctx.lineTo(padding + chartW, padding + chartH);
+    ctx.stroke();
+
+    // bars
+    for (let i = 0; i < n; i++) {
+        const c = created[i] ?? 0;
+        const u = updated[i] ?? 0;
+        const x0 = padding + i * groupW + (groupW - barW * 2 - 6) / 2;
+
+        const cH = (c / maxV) * (chartH - 10);
+        const uH = (u / maxV) * (chartH - 10);
+
+        // created (blue)
+        ctx.fillStyle = '#3b82f6';
+        ctx.fillRect(x0, padding + chartH - cH, barW, cH);
+
+        // updated (amber)
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(x0 + barW + 6, padding + chartH - uH, barW, uH);
+    }
+
+    // legend
+    ctx.fillStyle = '#111827';
+    ctx.font = '12px Segoe UI';
+    ctx.fillText('Thêm mới', padding + 10, padding + 12);
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(padding, padding + 4, 8, 8);
+
+    ctx.fillStyle = '#111827';
+    ctx.fillText('Cập nhật', padding + 90, padding + 12);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(padding + 78, padding + 4, 8, 8);
+
+    // reset transform (avoid double scaling if re-render)
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+// ========== SETTINGS (Cài đặt) ==========
+async function loadSettings() {
+    try {
+        if (!settingsForm) return;
+        if (settingsLoadedOnce && !document.getElementById('settings-section')?.classList.contains('active')) return;
+
+        if (reloadSettingsBtn) {
+            reloadSettingsBtn.disabled = true;
+            reloadSettingsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải...';
+        }
+
+        const response = await fetch(`${API_BASE}/settings`, { headers: getAuthHeaders() });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || 'Settings error');
+
+        const s = result.data;
+        settingAiEnabled.value = String(Boolean(s.ai?.enabled));
+        settingAiModel.value = s.ai?.model || '';
+        settingSystemInstruction.value = s.ai?.systemInstruction || '';
+        settingFuzzyThreshold.value = s.fuzzy?.threshold ?? 0.4;
+        settingImportMaxMb.value = s.importExport?.maxFileSizeMB ?? 5;
+        settingImportSkipDuplicates.value = String(Boolean(s.importExport?.skipDuplicates));
+
+        settingsLoadedOnce = true;
+        showToast('Đã nạp cài đặt', 'success');
+    } catch (e) {
+        console.error('Settings load error:', e);
+        showToast('Lỗi khi nạp cài đặt', 'error');
+    } finally {
+        if (reloadSettingsBtn) {
+            reloadSettingsBtn.disabled = false;
+            reloadSettingsBtn.innerHTML = '<i class="fas fa-sync"></i> Nạp lại';
+        }
+    }
+}
+
+async function saveSettings(e) {
+    e.preventDefault();
+    try {
+        if (saveSettingsBtn) {
+            saveSettingsBtn.disabled = true;
+            saveSettingsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang lưu...';
+        }
+
+        const payload = {
+            ai: {
+                enabled: settingAiEnabled.value === 'true',
+                model: settingAiModel.value.trim(),
+                systemInstruction: settingSystemInstruction.value.trim()
+            },
+            fuzzy: {
+                threshold: Number(settingFuzzyThreshold.value)
+            },
+            importExport: {
+                maxFileSizeMB: Number(settingImportMaxMb.value),
+                skipDuplicates: settingImportSkipDuplicates.value === 'true'
+            }
+        };
+
+        const response = await fetch(`${API_BASE}/settings`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || 'Save settings failed');
+
+        showToast('Đã lưu cài đặt', 'success');
+        settingsLoadedOnce = false;
+        await loadSettings();
+    } catch (e2) {
+        console.error('Settings save error:', e2);
+        customAlert({
+            title: 'Lỗi lưu cài đặt',
+            message: e2.message || 'Không thể lưu',
+            icon: 'danger',
+            confirmText: 'Đóng',
+            confirmClass: 'btn-primary'
+        });
+    } finally {
+        if (saveSettingsBtn) {
+            saveSettingsBtn.disabled = false;
+            saveSettingsBtn.innerHTML = '<i class="fas fa-save"></i> Lưu cài đặt';
+        }
+    }
 }
 
 // ========== Load Knowledge ==========

@@ -25,21 +25,80 @@ app.use(cors()); // Cho phép frontend kết nối
 // Serve static files (frontend)
 app.use(express.static('public'));
 
-const fuseOptions = {
-    keys: ["keyword"],
-    threshold: 0.4
-}
+// ========== SETTINGS STORAGE ==========
+const DB_FILE_PATH = "src/database/db.json";
+const SETTINGS_FILE_PATH = "src/database/settings.json";
+
+const DEFAULT_SETTINGS = {
+    ai: {
+        model: "gemini-3-pro-preview",
+        systemInstruction: "Bạn là chatbot tư vấn học tập cho trường đại học. Hãy trả lời ngắn gọn, thân thiện và chính xác.",
+        enabled: true
+    },
+    fuzzy: {
+        threshold: 0.4
+    },
+    importExport: {
+        // enforce in code; multer hard limit is higher
+        maxFileSizeMB: 5,
+        skipDuplicates: true
+    }
+};
 
 // Cấu hình Key từ .env
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Sử dụng model Gemini 1.5 Flash (Nhanh, rẻ, phù hợp chatbot tư vấn)
-const model = genAI.getGenerativeModel({
-    model: "gemini-3-pro-preview",
-    systemInstruction: "Bạn là chatbot tư vấn học tập cho trường đại học. Hãy trả lời ngắn gọn, thân thiện và chính xác."
+let appSettings = DEFAULT_SETTINGS;
+
+function loadSettings() {
+    try {
+        if (!fs.existsSync(SETTINGS_FILE_PATH)) {
+            fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(DEFAULT_SETTINGS, null, 2));
+            appSettings = DEFAULT_SETTINGS;
+            return;
+        }
+        const raw = fs.readFileSync(SETTINGS_FILE_PATH, "utf8");
+        const parsed = JSON.parse(raw || "{}");
+        appSettings = {
+            ...DEFAULT_SETTINGS,
+            ...parsed,
+            ai: { ...DEFAULT_SETTINGS.ai, ...(parsed.ai || {}) },
+            fuzzy: { ...DEFAULT_SETTINGS.fuzzy, ...(parsed.fuzzy || {}) },
+            importExport: { ...DEFAULT_SETTINGS.importExport, ...(parsed.importExport || {}) }
+        };
+    } catch (e) {
+        console.error("Lỗi khi load settings:", e);
+        appSettings = DEFAULT_SETTINGS;
+    }
+}
+
+function saveSettings(nextSettings) {
+    appSettings = nextSettings;
+    fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(appSettings, null, 2));
+}
+
+function getFuseOptions() {
+    return {
+        keys: ["keyword"],
+        threshold: appSettings.fuzzy.threshold
+    };
+}
+
+// AI model (cấu hình qua settings.json)
+let model = genAI.getGenerativeModel({
+    model: appSettings.ai.model,
+    systemInstruction: appSettings.ai.systemInstruction
 });
 
-const DB_FILE_PATH = "src/database/db.json";
+function rebuildModel() {
+    model = genAI.getGenerativeModel({
+        model: appSettings.ai.model,
+        systemInstruction: appSettings.ai.systemInstruction
+    });
+}
+
+loadSettings();
+rebuildModel();
 
 let knowledgeBase = [];
 if (fs.existsSync(DB_FILE_PATH)) {
@@ -145,13 +204,74 @@ app.post("/api/verify", authenticateToken, (req, res) => {
     });
 });
 
+// ========== SETTINGS API (Protected) ==========
+
+app.get("/api/settings", authenticateToken, (req, res) => {
+    try {
+        loadSettings();
+        res.json({ success: true, data: appSettings });
+    } catch (e) {
+        console.error("Lỗi khi lấy settings:", e);
+        res.status(500).json({ success: false, error: "Lỗi khi lấy settings" });
+    }
+});
+
+app.put("/api/settings", authenticateToken, (req, res) => {
+    try {
+        const body = req.body || {};
+
+        const next = {
+            ...DEFAULT_SETTINGS,
+            ...appSettings,
+            ai: { ...DEFAULT_SETTINGS.ai, ...appSettings.ai, ...(body.ai || {}) },
+            fuzzy: { ...DEFAULT_SETTINGS.fuzzy, ...appSettings.fuzzy, ...(body.fuzzy || {}) },
+            importExport: { ...DEFAULT_SETTINGS.importExport, ...appSettings.importExport, ...(body.importExport || {}) }
+        };
+
+        // Validate
+        if (typeof next.ai.enabled !== "boolean") next.ai.enabled = true;
+
+        if (typeof next.ai.model !== "string" || !next.ai.model.trim()) {
+            return res.status(400).json({ success: false, error: "ai.model không hợp lệ" });
+        }
+        next.ai.model = next.ai.model.trim();
+
+        if (typeof next.ai.systemInstruction !== "string") {
+            return res.status(400).json({ success: false, error: "ai.systemInstruction không hợp lệ" });
+        }
+        next.ai.systemInstruction = next.ai.systemInstruction.trim();
+
+        const thr = Number(next.fuzzy.threshold);
+        if (!Number.isFinite(thr) || thr < 0 || thr > 1) {
+            return res.status(400).json({ success: false, error: "fuzzy.threshold phải trong khoảng 0..1" });
+        }
+        next.fuzzy.threshold = thr;
+
+        const maxMB = Number(next.importExport.maxFileSizeMB);
+        if (!Number.isFinite(maxMB) || maxMB < 1 || maxMB > 20) {
+            return res.status(400).json({ success: false, error: "importExport.maxFileSizeMB phải trong khoảng 1..20" });
+        }
+        next.importExport.maxFileSizeMB = Math.round(maxMB);
+        next.importExport.skipDuplicates = Boolean(next.importExport.skipDuplicates);
+
+        saveSettings(next);
+        rebuildModel();
+
+        res.json({ success: true, message: "Đã lưu cài đặt", data: appSettings });
+    } catch (e) {
+        console.error("Lỗi khi lưu settings:", e);
+        res.status(500).json({ success: false, error: "Lỗi khi lưu settings" });
+    }
+});
+
 // ========== MULTER CONFIG FOR FILE UPLOAD ==========
 
 // Configure multer for memory storage (temporary)
 const storage = multer.memoryStorage();
 const upload = multer({ 
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    // Hard limit: 20MB. Actual max file size is enforced via settings.
+    limits: { fileSize: 20 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         // Accept only xlsx and xls files
         if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
@@ -164,6 +284,89 @@ const upload = multer({
 });
 
 // ========== IMPORT/EXPORT API ENDPOINTS (Protected) ==========
+
+// ========== STATS API (Protected) ==========
+function startOfDay(d) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+}
+
+function formatDayKey(d) {
+    const x = startOfDay(d);
+    const yyyy = x.getFullYear();
+    const mm = String(x.getMonth() + 1).padStart(2, "0");
+    const dd = String(x.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+app.get("/api/stats", authenticateToken, (req, res) => {
+    try {
+        reloadKnowledgeBase();
+
+        const total = knowledgeBase.length;
+        const withCreatedAt = knowledgeBase.filter(x => x.createdAt).length;
+        const withUpdatedAt = knowledgeBase.filter(x => x.updatedAt).length;
+
+        // Time buckets: last 14 days
+        const days = 14;
+        const now = new Date();
+        const dayKeys = [];
+        for (let i = days - 1; i >= 0; i--) {
+            const dt = new Date(now);
+            dt.setDate(dt.getDate() - i);
+            dayKeys.push(formatDayKey(dt));
+        }
+
+        const createdByDay = Object.fromEntries(dayKeys.map(k => [k, 0]));
+        const updatedByDay = Object.fromEntries(dayKeys.map(k => [k, 0]));
+
+        for (const item of knowledgeBase) {
+            if (item.createdAt) {
+                const k = formatDayKey(item.createdAt);
+                if (k in createdByDay) createdByDay[k] += 1;
+            }
+            if (item.updatedAt) {
+                const k = formatDayKey(item.updatedAt);
+                if (k in updatedByDay) updatedByDay[k] += 1;
+            }
+        }
+
+        // Latest entries
+        const latest = [...knowledgeBase]
+            .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+            .slice(0, 10)
+            .map(x => ({
+                id: x.id,
+                keyword: x.keyword,
+                createdAt: x.createdAt || null,
+                updatedAt: x.updatedAt || null
+            }));
+
+        // Longest answers / keywords (simple quality signals)
+        const topLongestAnswers = [...knowledgeBase]
+            .map(x => ({ id: x.id, keyword: x.keyword, len: (x.answer || "").length }))
+            .sort((a, b) => b.len - a.len)
+            .slice(0, 10);
+
+        res.json({
+            success: true,
+            data: {
+                totals: { total, withCreatedAt, withUpdatedAt },
+                chart: {
+                    days: dayKeys,
+                    created: dayKeys.map(k => createdByDay[k]),
+                    updated: dayKeys.map(k => updatedByDay[k])
+                },
+                latest,
+                topLongestAnswers
+            }
+        });
+    } catch (e) {
+        console.error("Lỗi khi lấy stats:", e);
+        res.status(500).json({ success: false, error: "Lỗi khi lấy thống kê" });
+    }
+});
 
 // GET: Export knowledge base to Excel
 app.get("/api/knowledge/export", authenticateToken, (req, res) => {
@@ -222,6 +425,15 @@ app.post("/api/knowledge/import", authenticateToken, upload.single('file'), (req
             });
         }
 
+        // Enforce max file size from settings
+        const maxBytes = (appSettings.importExport.maxFileSizeMB || 5) * 1024 * 1024;
+        if (req.file.size > maxBytes) {
+            return res.status(400).json({
+                success: false,
+                error: `File quá lớn. Tối đa ${appSettings.importExport.maxFileSizeMB || 5}MB`
+            });
+        }
+
         // Read Excel file from buffer
         const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
         
@@ -260,7 +472,7 @@ app.post("/api/knowledge/import", authenticateToken, upload.single('file'), (req
                 item.keyword.toLowerCase().trim() === keyword.toLowerCase().trim()
             );
 
-            if (existing) {
+            if (existing && appSettings.importExport.skipDuplicates) {
                 errors.push(`Dòng ${rowNum}: Câu hỏi "${keyword}" đã tồn tại`);
                 return;
             }
@@ -272,6 +484,14 @@ app.post("/api/knowledge/import", authenticateToken, upload.single('file'), (req
                 answer: answer.trim(),
                 createdAt: new Date().toISOString()
             };
+
+            if (existing && !appSettings.importExport.skipDuplicates) {
+                // Upsert
+                existing.answer = newEntry.answer;
+                existing.updatedAt = new Date().toISOString();
+                imported.push(existing);
+                return;
+            }
 
             knowledgeBase.push(newEntry);
             imported.push(newEntry);
@@ -470,7 +690,7 @@ app.post("/chat", async (req, res) => {
     try {
         const { message } = req.body;
 
-        const fuse = new Fuse(knowledgeBase, fuseOptions);
+        const fuse = new Fuse(knowledgeBase, getFuseOptions());
         const searchResult = fuse.search(message);
         console.log(searchResult);
 
@@ -481,6 +701,14 @@ app.post("/chat", async (req, res) => {
             const bestMatch = searchResult[0].item;
 
             return res.json({ reply: bestMatch.answer, source: "database" });
+        }
+
+        // If AI disabled, return default response
+        if (!appSettings.ai.enabled) {
+            return res.json({
+                reply: "Mình chưa có câu trả lời phù hợp trong cơ sở dữ liệu. Bạn vui lòng liên hệ phòng đào tạo hoặc đặt câu hỏi cụ thể hơn để mình bổ sung nhé.",
+                source: "default"
+            });
         }
 
         // 1. Khởi tạo đoạn chat (để bot nhớ ngữ cảnh nếu cần mở rộng sau này)
