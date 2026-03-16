@@ -10,6 +10,12 @@ const model = genAI.getGenerativeModel({
   systemInstruction: settings.ai.systemInstruction
 });
 
+// Fuzzy search config (serverless)
+const fuseOptions = {
+  keys: ['keyword'],
+  threshold: settings.fuzzy.threshold ?? 0.4
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
