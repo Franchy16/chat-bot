@@ -9,8 +9,9 @@ const suggestionChips = document.querySelectorAll('.suggestion-chip');
 const suggestions = document.getElementById('suggestions');
 
 // ========== Configuration ==========
-// Backend chạy cùng origin → dùng URL tương đối
-const API_URL = '/chat';
+// Trên Vercel backend được triển khai dưới dạng serverless function `/api/chat`
+// Local (npm run server) bạn vẫn có thể dùng reverse proxy hoặc cấu hình tương tự.
+const API_URL = '/api/chat';
 let isTyping = false;
 
 // ========== Initialize ==========
