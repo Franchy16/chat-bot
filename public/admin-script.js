@@ -1,15 +1,6 @@
 // ========== Configuration ==========
-// Auto detect API URL based on current location
-const getApiBase = () => {
-    // If accessing from localhost, use localhost
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        return 'http://localhost:8080/api';
-    }
-    // Otherwise use current origin (for mobile/remote access)
-    return `${window.location.protocol}//${window.location.hostname}:8080/api`;
-};
-
-const API_BASE = getApiBase();
+// Backend chạy cùng origin → dùng URL tương đối
+const API_BASE = '/api';
 const API_URL = `${API_BASE}/knowledge`;
 
 // ========== Authentication ==========
