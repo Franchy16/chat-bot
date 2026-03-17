@@ -1,4 +1,4 @@
-import { loadKnowledgeBase, saveKnowledgeBase, verifyJwt } from '../_utils.js';
+import { deleteKnowledgeEntryById, updateKnowledgeEntryById, verifyJwt } from '../_utils.js';
 
 export default async function handler(req, res) {
   const user = verifyJwt(req, res);
@@ -8,14 +8,6 @@ export default async function handler(req, res) {
     query: { id }
   } = req;
 
-  const kb = loadKnowledgeBase();
-  const index = kb.findIndex((item) => item.id === id);
-
-  if (index === -1) {
-    res.status(404).json({ success: false, error: 'Không tìm thấy entry' });
-    return;
-  }
-
   if (req.method === 'PUT') {
     try {
       const { keyword, answer } = req.body || {};
@@ -23,14 +15,12 @@ export default async function handler(req, res) {
         res.status(400).json({ success: false, error: 'Thiếu keyword hoặc answer' });
         return;
       }
-      kb[index] = {
-        ...kb[index],
-        keyword: keyword.trim(),
-        answer: answer.trim(),
-        updatedAt: new Date().toISOString()
-      };
-      saveKnowledgeBase(kb);
-      res.json({ success: true, message: 'Đã cập nhật câu trả lời', data: kb[index] });
+      const updated = await updateKnowledgeEntryById(id, { keyword, answer });
+      if (!updated) {
+        res.status(404).json({ success: false, error: 'Không tìm thấy entry' });
+        return;
+      }
+      res.json({ success: true, message: 'Đã cập nhật câu trả lời', data: updated });
     } catch (e) {
       console.error('Error updating knowledge:', e);
       res.status(500).json({ success: false, error: 'Lỗi server' });
@@ -40,8 +30,11 @@ export default async function handler(req, res) {
 
   if (req.method === 'DELETE') {
     try {
-      const deleted = kb.splice(index, 1)[0];
-      saveKnowledgeBase(kb);
+      const deleted = await deleteKnowledgeEntryById(id);
+      if (!deleted) {
+        res.status(404).json({ success: false, error: 'Không tìm thấy entry' });
+        return;
+      }
       res.json({ success: true, message: 'Đã xóa câu trả lời', data: deleted });
     } catch (e) {
       console.error('Error deleting knowledge:', e);

@@ -237,7 +237,7 @@ PORT=3000
 
 ## 📝 Ghi chú
 
-- Knowledge base tự động lưu vào `src/database/db.json`
+- Knowledge base lưu trong MongoDB (collection `MONGODB_KNOWLEDGE_COLLECTION`)
 - Lịch sử chat lưu trong LocalStorage của browser
 - API key Google Gemini miễn phí có giới hạn request/ngày
 - Model `gemini-1.5-pro` nhanh và hiệu quả cho chatbot

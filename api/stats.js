@@ -24,7 +24,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const knowledgeBase = loadKnowledgeBase();
+    const knowledgeBase = await loadKnowledgeBase();
     const total = knowledgeBase.length;
     const withCreatedAt = knowledgeBase.filter((x) => x.createdAt).length;
     const withUpdatedAt = knowledgeBase.filter((x) => x.updatedAt).length;

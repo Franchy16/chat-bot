@@ -10,6 +10,11 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import xlsx from 'xlsx';
 import multer from 'multer';
+import { getKnowledgeCollection } from "../lib/mongo.js";
+import { getSettingsCollection } from "../lib/mongo.js";
+import { getAdminsCollection } from "../lib/mongo.js";
+import swaggerUi from "swagger-ui-express";
+import { buildOpenApiSpec } from "./openapi.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,10 +30,12 @@ app.use(cors()); // Cho phép frontend kết nối
 // Serve static files (frontend)
 app.use(express.static('public'));
 
-// ========== SETTINGS STORAGE ==========
-const DB_FILE_PATH = "src/database/db.json";
-const SETTINGS_FILE_PATH = "src/database/settings.json";
+// ========== SWAGGER / OPENAPI ==========
+const openapiSpec = buildOpenApiSpec({ title: "Chatbot API", version: "1.0.0" });
+app.get("/api/openapi.json", (req, res) => res.json(openapiSpec));
+app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openapiSpec, { explorer: true }));
 
+// ========== SETTINGS STORAGE ==========
 const DEFAULT_SETTINGS = {
     ai: {
         model: "gemini-3-pro-preview",
@@ -50,15 +57,13 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 let appSettings = DEFAULT_SETTINGS;
 
-function loadSettings() {
+let settingsCol = null;
+
+async function loadSettings() {
     try {
-        if (!fs.existsSync(SETTINGS_FILE_PATH)) {
-            fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(DEFAULT_SETTINGS, null, 2));
-            appSettings = DEFAULT_SETTINGS;
-            return;
-        }
-        const raw = fs.readFileSync(SETTINGS_FILE_PATH, "utf8");
-        const parsed = JSON.parse(raw || "{}");
+        if (!settingsCol) settingsCol = await getSettingsCollection();
+        const doc = await settingsCol.findOne({ _id: "app" }, { projection: { _id: 0 } });
+        const parsed = doc || {};
         appSettings = {
             ...DEFAULT_SETTINGS,
             ...parsed,
@@ -67,14 +72,23 @@ function loadSettings() {
             importExport: { ...DEFAULT_SETTINGS.importExport, ...(parsed.importExport || {}) }
         };
     } catch (e) {
-        console.error("Lỗi khi load settings:", e);
+        console.error("Lỗi khi load settings (mongodb):", e);
         appSettings = DEFAULT_SETTINGS;
     }
 }
 
-function saveSettings(nextSettings) {
-    appSettings = nextSettings;
-    fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(appSettings, null, 2));
+async function saveSettings(nextSettings) {
+    try {
+        if (!settingsCol) settingsCol = await getSettingsCollection();
+        appSettings = nextSettings;
+        await settingsCol.updateOne(
+            { _id: "app" },
+            { $set: { ...appSettings, updatedAt: new Date().toISOString() } },
+            { upsert: true }
+        );
+    } catch (e) {
+        console.error("Lỗi khi save settings (mongodb):", e);
+    }
 }
 
 function getFuseOptions() {
@@ -97,18 +111,37 @@ function rebuildModel() {
     });
 }
 
-loadSettings();
+await loadSettings();
 rebuildModel();
 
+let adminsCol = null;
+async function ensureDefaultAdmin() {
+    if (!adminsCol) adminsCol = await getAdminsCollection();
+    await adminsCol.createIndex({ usernameLower: 1 }, { unique: true });
+
+    const count = await adminsCol.countDocuments();
+    if (count > 0) return;
+
+    const username = process.env.ADMIN_USERNAME || "admin";
+    const password = process.env.ADMIN_PASSWORD || "admin123";
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await adminsCol.insertOne({
+        id: Date.now().toString(),
+        username,
+        usernameLower: String(username).trim().toLowerCase(),
+        passwordHash,
+        role: "admin",
+        createdAt: new Date().toISOString()
+    });
+    console.log("✅ Seeded default admin from .env");
+}
+await ensureDefaultAdmin();
+
+let knowledgeCol = null;
 let knowledgeBase = [];
-if (fs.existsSync(DB_FILE_PATH)) {
-    const data = fs.readFileSync(DB_FILE_PATH);
-    knowledgeBase = JSON.parse(data);
-}
-else {
-    console.log("---Not Found Data---");
-    fs.writeFileSync(DB_FILE_PATH, "[]");
-}
+knowledgeCol = await getKnowledgeCollection();
+await reloadKnowledgeBase();
 
 function normalizeText(text) {
     return text.toLowerCase()
@@ -116,12 +149,17 @@ function normalizeText(text) {
         .trim();
 }
 
-// Helper function để reload knowledge base từ file
-function reloadKnowledgeBase() {
-    if (fs.existsSync(DB_FILE_PATH)) {
-        const data = fs.readFileSync(DB_FILE_PATH);
-        knowledgeBase = JSON.parse(data);
-    }
+function normalizeKeyword(text) {
+    return String(text || "").trim().toLowerCase();
+}
+
+// Helper function để reload knowledge base từ MongoDB
+async function reloadKnowledgeBase() {
+    if (!knowledgeCol) knowledgeCol = await getKnowledgeCollection();
+    knowledgeBase = await knowledgeCol
+        .find({}, { projection: { _id: 0 } })
+        .sort({ createdAt: -1, id: -1 })
+        .toArray();
 }
 
 // ========== AUTHENTICATION ==========
@@ -162,20 +200,22 @@ app.post("/api/login", async (req, res) => {
             });
         }
 
-        // Kiểm tra thông tin đăng nhập
-        const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-        const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-
-        if (username !== adminUsername || password !== adminPassword) {
-            return res.status(401).json({ 
-                success: false, 
-                error: "Tên đăng nhập hoặc mật khẩu không đúng" 
-            });
+        if (!adminsCol) adminsCol = await getAdminsCollection();
+        const admin = await adminsCol.findOne(
+            { usernameLower: String(username).trim().toLowerCase() },
+            { projection: { _id: 0 } }
+        );
+        if (!admin) {
+            return res.status(401).json({ success: false, error: "Tên đăng nhập hoặc mật khẩu không đúng" });
+        }
+        const ok = await bcrypt.compare(String(password), admin.passwordHash || "");
+        if (!ok) {
+            return res.status(401).json({ success: false, error: "Tên đăng nhập hoặc mật khẩu không đúng" });
         }
 
         // Tạo JWT token (hết hạn sau 24 giờ)
         const token = jwt.sign(
-            { username: username, role: 'admin' },
+            { adminId: admin.id, username: admin.username, role: admin.role || 'admin' },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
@@ -185,8 +225,9 @@ app.post("/api/login", async (req, res) => {
             message: "Đăng nhập thành công",
             token: token,
             user: {
-                username: username,
-                role: 'admin'
+                id: admin.id,
+                username: admin.username,
+                role: admin.role || 'admin'
             }
         });
     } catch (error) {
@@ -204,11 +245,120 @@ app.post("/api/verify", authenticateToken, (req, res) => {
     });
 });
 
-// ========== SETTINGS API (Protected) ==========
-
-app.get("/api/settings", authenticateToken, (req, res) => {
+// ========== ADMIN MANAGEMENT (Protected) ==========
+app.get("/api/admins", authenticateToken, async (req, res) => {
     try {
-        loadSettings();
+        if (!adminsCol) adminsCol = await getAdminsCollection();
+        const admins = await adminsCol
+            .find({}, { projection: { _id: 0, passwordHash: 0 } })
+            .sort({ createdAt: -1 })
+            .toArray();
+        res.json({ success: true, data: admins, total: admins.length });
+    } catch (e) {
+        console.error("Lỗi khi lấy danh sách admin:", e);
+        res.status(500).json({ success: false, error: "Lỗi server" });
+    }
+});
+
+app.post("/api/admins", authenticateToken, async (req, res) => {
+    try {
+        const { username, password } = req.body || {};
+        if (!username || !password) {
+            return res.status(400).json({ success: false, error: "Thiếu username hoặc password" });
+        }
+        const uname = String(username).trim();
+        if (uname.length < 3) {
+            return res.status(400).json({ success: false, error: "username phải >= 3 ký tự" });
+        }
+        if (String(password).length < 6) {
+            return res.status(400).json({ success: false, error: "password phải >= 6 ký tự" });
+        }
+        if (!adminsCol) adminsCol = await getAdminsCollection();
+        const doc = {
+            id: Date.now().toString(),
+            username: uname,
+            usernameLower: uname.toLowerCase(),
+            passwordHash: await bcrypt.hash(String(password), 10),
+            role: "admin",
+            createdAt: new Date().toISOString()
+        };
+        await adminsCol.insertOne(doc);
+        const { passwordHash, ...safe } = doc;
+        res.json({ success: true, message: "Đã tạo admin", data: safe });
+    } catch (e) {
+        const msg = String(e?.message || "");
+        if (msg.includes("E11000")) {
+            return res.status(400).json({ success: false, error: "username đã tồn tại" });
+        }
+        console.error("Lỗi khi tạo admin:", e);
+        res.status(500).json({ success: false, error: "Lỗi server" });
+    }
+});
+
+app.put("/api/admins/:id", authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { username, password } = req.body || {};
+        const update = { updatedAt: new Date().toISOString() };
+
+        if (username != null) {
+            const uname = String(username).trim();
+            if (uname.length < 3) return res.status(400).json({ success: false, error: "username phải >= 3 ký tự" });
+            update.username = uname;
+            update.usernameLower = uname.toLowerCase();
+        }
+        if (password != null && String(password).length > 0) {
+            if (String(password).length < 6) return res.status(400).json({ success: false, error: "password phải >= 6 ký tự" });
+            update.passwordHash = await bcrypt.hash(String(password), 10);
+        }
+
+        if (!adminsCol) adminsCol = await getAdminsCollection();
+        const result = await adminsCol.findOneAndUpdate(
+            { id: String(id) },
+            { $set: update },
+            { returnDocument: "after", projection: { _id: 0, passwordHash: 0 } }
+        );
+        if (!result.value) return res.status(404).json({ success: false, error: "Không tìm thấy admin" });
+        res.json({ success: true, message: "Đã cập nhật admin", data: result.value });
+    } catch (e) {
+        const msg = String(e?.message || "");
+        if (msg.includes("E11000")) {
+            return res.status(400).json({ success: false, error: "username đã tồn tại" });
+        }
+        console.error("Lỗi khi cập nhật admin:", e);
+        res.status(500).json({ success: false, error: "Lỗi server" });
+    }
+});
+
+app.delete("/api/admins/:id", authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!adminsCol) adminsCol = await getAdminsCollection();
+
+        const count = await adminsCol.countDocuments();
+        if (count <= 1) {
+            return res.status(400).json({ success: false, error: "Không thể xoá admin cuối cùng" });
+        }
+        if (String(req.user?.adminId) === String(id)) {
+            return res.status(400).json({ success: false, error: "Không thể tự xoá tài khoản đang đăng nhập" });
+        }
+
+        const deleted = await adminsCol.findOneAndDelete(
+            { id: String(id) },
+            { projection: { _id: 0, passwordHash: 0 } }
+        );
+        if (!deleted.value) return res.status(404).json({ success: false, error: "Không tìm thấy admin" });
+        res.json({ success: true, message: "Đã xoá admin", data: deleted.value });
+    } catch (e) {
+        console.error("Lỗi khi xoá admin:", e);
+        res.status(500).json({ success: false, error: "Lỗi server" });
+    }
+});
+
+// ========== SETTINGS API (Protected) ==========
+app.get("/api/settings", authenticateToken, async (req, res) => {
+    try {
+        await loadSettings();
         res.json({ success: true, data: appSettings });
     } catch (e) {
         console.error("Lỗi khi lấy settings:", e);
@@ -216,7 +366,7 @@ app.get("/api/settings", authenticateToken, (req, res) => {
     }
 });
 
-app.put("/api/settings", authenticateToken, (req, res) => {
+app.put("/api/settings", authenticateToken, async (req, res) => {
     try {
         const body = req.body || {};
 
@@ -254,7 +404,7 @@ app.put("/api/settings", authenticateToken, (req, res) => {
         next.importExport.maxFileSizeMB = Math.round(maxMB);
         next.importExport.skipDuplicates = Boolean(next.importExport.skipDuplicates);
 
-        saveSettings(next);
+        await saveSettings(next);
         rebuildModel();
 
         res.json({ success: true, message: "Đã lưu cài đặt", data: appSettings });
@@ -300,9 +450,9 @@ function formatDayKey(d) {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-app.get("/api/stats", authenticateToken, (req, res) => {
+app.get("/api/stats", authenticateToken, async (req, res) => {
     try {
-        reloadKnowledgeBase();
+        await reloadKnowledgeBase();
 
         const total = knowledgeBase.length;
         const withCreatedAt = knowledgeBase.filter(x => x.createdAt).length;
@@ -369,9 +519,9 @@ app.get("/api/stats", authenticateToken, (req, res) => {
 });
 
 // GET: Export knowledge base to Excel
-app.get("/api/knowledge/export", authenticateToken, (req, res) => {
+app.get("/api/knowledge/export", authenticateToken, async (req, res) => {
     try {
-        reloadKnowledgeBase();
+        await reloadKnowledgeBase();
 
         // Prepare data for Excel
         const excelData = knowledgeBase.map((item, index) => ({
@@ -416,7 +566,7 @@ app.get("/api/knowledge/export", authenticateToken, (req, res) => {
 });
 
 // POST: Import knowledge base from Excel
-app.post("/api/knowledge/import", authenticateToken, upload.single('file'), (req, res) => {
+app.post("/api/knowledge/import", authenticateToken, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ 
@@ -450,6 +600,8 @@ app.post("/api/knowledge/import", authenticateToken, upload.single('file'), (req
                 error: "File Excel rỗng hoặc không đúng format" 
             });
         }
+
+        await reloadKnowledgeBase();
 
         // Validate and process data
         const imported = [];
@@ -487,6 +639,8 @@ app.post("/api/knowledge/import", authenticateToken, upload.single('file'), (req
 
             if (existing && !appSettings.importExport.skipDuplicates) {
                 // Upsert
+                existing.keyword = newEntry.keyword;
+                existing.keywordLower = normalizeKeyword(newEntry.keyword);
                 existing.answer = newEntry.answer;
                 existing.updatedAt = new Date().toISOString();
                 imported.push(existing);
@@ -497,9 +651,23 @@ app.post("/api/knowledge/import", authenticateToken, upload.single('file'), (req
             imported.push(newEntry);
         });
 
-        // Save to file
+        // Save to MongoDB
         if (imported.length > 0) {
-            fs.writeFileSync(DB_FILE_PATH, JSON.stringify(knowledgeBase, null, 2));
+            if (!knowledgeCol) knowledgeCol = await getKnowledgeCollection();
+            const ops = imported.map((doc) => ({
+                updateOne: {
+                    filter: { id: doc.id },
+                    update: {
+                        $set: {
+                            ...doc,
+                            keywordLower: normalizeKeyword(doc.keyword)
+                        }
+                    },
+                    upsert: true
+                }
+            }));
+            await knowledgeCol.bulkWrite(ops, { ordered: false });
+            await reloadKnowledgeBase();
         }
 
         res.json({ 
@@ -568,9 +736,9 @@ app.get("/api/knowledge/template", authenticateToken, (req, res) => {
 // ========== ADMIN API ENDPOINTS (Protected) ==========
 
 // GET: Lấy tất cả câu trả lời mặc định
-app.get("/api/knowledge", authenticateToken, (req, res) => {
+app.get("/api/knowledge", authenticateToken, async (req, res) => {
     try {
-        reloadKnowledgeBase();
+        await reloadKnowledgeBase();
         res.json({ 
             success: true, 
             data: knowledgeBase,
@@ -583,7 +751,7 @@ app.get("/api/knowledge", authenticateToken, (req, res) => {
 });
 
 // POST: Thêm câu trả lời mới
-app.post("/api/knowledge", authenticateToken, (req, res) => {
+app.post("/api/knowledge", authenticateToken, async (req, res) => {
     try {
         const { keyword, answer } = req.body;
         
@@ -597,12 +765,14 @@ app.post("/api/knowledge", authenticateToken, (req, res) => {
         const newEntry = {
             id: Date.now().toString(),
             keyword: keyword.trim(),
+            keywordLower: normalizeKeyword(keyword),
             answer: answer.trim(),
             createdAt: new Date().toISOString()
         };
 
+        if (!knowledgeCol) knowledgeCol = await getKnowledgeCollection();
+        await knowledgeCol.insertOne(newEntry);
         knowledgeBase.push(newEntry);
-        fs.writeFileSync(DB_FILE_PATH, JSON.stringify(knowledgeBase, null, 2));
 
         res.json({ 
             success: true, 
@@ -616,7 +786,7 @@ app.post("/api/knowledge", authenticateToken, (req, res) => {
 });
 
 // PUT: Cập nhật câu trả lời
-app.put("/api/knowledge/:id", authenticateToken, (req, res) => {
+app.put("/api/knowledge/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const { keyword, answer } = req.body;
@@ -628,28 +798,29 @@ app.put("/api/knowledge/:id", authenticateToken, (req, res) => {
             });
         }
 
-        const index = knowledgeBase.findIndex(item => item.id === id);
-        
-        if (index === -1) {
-            return res.status(404).json({ 
-                success: false, 
-                error: "Không tìm thấy entry" 
-            });
+        if (!knowledgeCol) knowledgeCol = await getKnowledgeCollection();
+        const updatedAt = new Date().toISOString();
+        await knowledgeCol.updateOne(
+            { id },
+            {
+                $set: {
+                    keyword: keyword.trim(),
+                    keywordLower: normalizeKeyword(keyword),
+                    answer: answer.trim(),
+                    updatedAt
+                }
+            }
+        );
+        await reloadKnowledgeBase();
+        const updated = knowledgeBase.find(item => item.id === id);
+        if (!updated) {
+            return res.status(404).json({ success: false, error: "Không tìm thấy entry" });
         }
-
-        knowledgeBase[index] = {
-            ...knowledgeBase[index],
-            keyword: keyword.trim(),
-            answer: answer.trim(),
-            updatedAt: new Date().toISOString()
-        };
-
-        fs.writeFileSync(DB_FILE_PATH, JSON.stringify(knowledgeBase, null, 2));
 
         res.json({ 
             success: true, 
             message: "Đã cập nhật câu trả lời",
-            data: knowledgeBase[index]
+            data: updated
         });
     } catch (error) {
         console.error("Lỗi khi cập nhật knowledge:", error);
@@ -658,25 +829,23 @@ app.put("/api/knowledge/:id", authenticateToken, (req, res) => {
 });
 
 // DELETE: Xóa câu trả lời
-app.delete("/api/knowledge/:id", authenticateToken, (req, res) => {
+app.delete("/api/knowledge/:id", authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
-        const index = knowledgeBase.findIndex(item => item.id === id);
-        
-        if (index === -1) {
-            return res.status(404).json({ 
-                success: false, 
-                error: "Không tìm thấy entry" 
-            });
+        if (!knowledgeCol) knowledgeCol = await getKnowledgeCollection();
+        const deleted = await knowledgeCol.findOneAndDelete(
+            { id },
+            { projection: { _id: 0 } }
+        );
+        if (!deleted.value) {
+            return res.status(404).json({ success: false, error: "Không tìm thấy entry" });
         }
-
-        const deleted = knowledgeBase.splice(index, 1);
-        fs.writeFileSync(DB_FILE_PATH, JSON.stringify(knowledgeBase, null, 2));
+        await reloadKnowledgeBase();
 
         res.json({ 
             success: true, 
             message: "Đã xóa câu trả lời",
-            data: deleted[0]
+            data: deleted.value
         });
     } catch (error) {
         console.error("Lỗi khi xóa knowledge:", error);
@@ -686,9 +855,10 @@ app.delete("/api/knowledge/:id", authenticateToken, (req, res) => {
 
 // ========== CHAT ENDPOINT ==========
 
-app.post("/chat", async (req, res) => {
+app.post("/api/chat", async (req, res) => {
     try {
         const { message } = req.body;
+        await reloadKnowledgeBase();
 
         const fuse = new Fuse(knowledgeBase, getFuseOptions());
         const searchResult = fuse.search(message);
@@ -724,13 +894,15 @@ app.post("/chat", async (req, res) => {
         const text = response.text();
 
         const newEntry = {
+            id: Date.now().toString(),
             keyword: message,
-            answer: text
-        }
-
-        knowledgeBase.push(newEntry)
-
-        fs.writeFileSync(DB_FILE_PATH, JSON.stringify(knowledgeBase, null, 2));
+            keywordLower: normalizeKeyword(message),
+            answer: text,
+            createdAt: new Date().toISOString()
+        };
+        if (!knowledgeCol) knowledgeCol = await getKnowledgeCollection();
+        await knowledgeCol.insertOne(newEntry);
+        knowledgeBase.push(newEntry);
 
         // 3. Trả về kết quả
         res.json({ reply: text, source: "Google Gemini AI" });

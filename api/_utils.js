@@ -1,13 +1,5 @@
-import fs from 'fs';
-import path from 'path';
 import jwt from 'jsonwebtoken';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-export const DB_FILE_PATH = path.join(__dirname, '../src/database/db.json');
-export const SETTINGS_FILE_PATH = path.join(__dirname, '../src/database/settings.json');
+import { getKnowledgeCollection, getSettingsCollection } from '../src/lib/mongo.js';
 
 export const DEFAULT_SETTINGS = {
   ai: {
@@ -25,33 +17,68 @@ export const DEFAULT_SETTINGS = {
   }
 };
 
-export function loadKnowledgeBase() {
+export async function loadKnowledgeBase() {
   try {
-    if (!fs.existsSync(DB_FILE_PATH)) return [];
-    const raw = fs.readFileSync(DB_FILE_PATH, 'utf8');
-    return JSON.parse(raw || '[]');
+    const col = await getKnowledgeCollection();
+    return await col
+      .find({}, { projection: { _id: 0 } })
+      .sort({ createdAt: -1, id: -1 })
+      .toArray();
   } catch (e) {
-    console.error('Error loading DB:', e);
+    console.error('Error loading knowledge (mongodb):', e);
     return [];
   }
 }
 
-export function saveKnowledgeBase(data) {
-  try {
-    fs.writeFileSync(DB_FILE_PATH, JSON.stringify(data, null, 2));
-  } catch (e) {
-    console.error('Error saving DB:', e);
-  }
+function normalizeKeyword(k) {
+  return String(k || '').trim().toLowerCase();
 }
 
-export function loadSettings() {
+export async function createKnowledgeEntry({ keyword, answer }) {
+  const kw = String(keyword || '').trim();
+  const ans = String(answer || '').trim();
+  const doc = {
+    id: Date.now().toString(),
+    keyword: kw,
+    keywordLower: normalizeKeyword(kw),
+    answer: ans,
+    createdAt: new Date().toISOString()
+  };
+  const col = await getKnowledgeCollection();
+  await col.insertOne(doc);
+  return doc;
+}
+
+export async function updateKnowledgeEntryById(id, { keyword, answer }) {
+  const kw = String(keyword || '').trim();
+  const ans = String(answer || '').trim();
+  const col = await getKnowledgeCollection();
+  const res = await col.findOneAndUpdate(
+    { id: String(id) },
+    {
+      $set: {
+        keyword: kw,
+        keywordLower: normalizeKeyword(kw),
+        answer: ans,
+        updatedAt: new Date().toISOString()
+      }
+    },
+    { returnDocument: 'after', projection: { _id: 0 } }
+  );
+  return res.value;
+}
+
+export async function deleteKnowledgeEntryById(id) {
+  const col = await getKnowledgeCollection();
+  const res = await col.findOneAndDelete({ id: String(id) }, { projection: { _id: 0 } });
+  return res.value;
+}
+
+export async function loadSettings() {
   try {
-    if (!fs.existsSync(SETTINGS_FILE_PATH)) {
-      fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(DEFAULT_SETTINGS, null, 2));
-      return DEFAULT_SETTINGS;
-    }
-    const raw = fs.readFileSync(SETTINGS_FILE_PATH, 'utf8');
-    const parsed = JSON.parse(raw || '{}');
+    const col = await getSettingsCollection();
+    const doc = await col.findOne({ _id: 'app' }, { projection: { _id: 0 } });
+    const parsed = doc || {};
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
@@ -65,9 +92,14 @@ export function loadSettings() {
   }
 }
 
-export function saveSettings(next) {
+export async function saveSettings(next) {
   try {
-    fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(next, null, 2));
+    const col = await getSettingsCollection();
+    await col.updateOne(
+      { _id: 'app' },
+      { $set: { ...next, updatedAt: new Date().toISOString() } },
+      { upsert: true }
+    );
   } catch (e) {
     console.error('Error saving settings:', e);
   }

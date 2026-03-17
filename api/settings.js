@@ -6,7 +6,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
-      const s = loadSettings();
+      const s = await loadSettings();
       res.json({ success: true, data: s });
     } catch (e) {
       console.error('Settings load error (serverless):', e);
@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   if (req.method === 'PUT') {
     try {
       const body = req.body || {};
-      const current = loadSettings();
+      const current = await loadSettings();
 
       const next = {
         ...DEFAULT_SETTINGS,
@@ -63,7 +63,7 @@ export default async function handler(req, res) {
       next.importExport.maxFileSizeMB = Math.round(maxMB);
       next.importExport.skipDuplicates = Boolean(next.importExport.skipDuplicates);
 
-      saveSettings(next);
+      await saveSettings(next);
       res.json({ success: true, message: 'Đã lưu cài đặt', data: next });
     } catch (e) {
       console.error('Settings save error (serverless):', e);

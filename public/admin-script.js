@@ -115,6 +115,20 @@ const settingFuzzyThreshold = document.getElementById('settingFuzzyThreshold');
 const settingImportMaxMb = document.getElementById('settingImportMaxMb');
 const settingImportSkipDuplicates = document.getElementById('settingImportSkipDuplicates');
 
+// Admins section elements
+const adminsTableBody = document.getElementById('adminsTableBody');
+const addAdminBtn = document.getElementById('addAdminBtn');
+const refreshAdminsBtn = document.getElementById('refreshAdminsBtn');
+const adminModal = document.getElementById('adminModal');
+const adminForm = document.getElementById('adminForm');
+const adminModalTitle = document.getElementById('adminModalTitle');
+const closeAdminModal = document.getElementById('closeAdminModal');
+const cancelAdminBtn = document.getElementById('cancelAdminBtn');
+const saveAdminBtn = document.getElementById('saveAdminBtn');
+const adminEditId = document.getElementById('adminEditId');
+const adminUsername = document.getElementById('adminUsername');
+const adminPassword = document.getElementById('adminPassword');
+
 // Form inputs
 const editIdInput = document.getElementById('editId');
 const keywordInput = document.getElementById('keyword');
@@ -139,6 +153,8 @@ let knowledgeData = [];
 let deleteId = null;
 let statsLoadedOnce = false;
 let settingsLoadedOnce = false;
+let adminsLoadedOnce = false;
+let adminsData = [];
 
 // ========== Initialize ==========
 document.addEventListener('DOMContentLoaded', () => {
@@ -173,6 +189,13 @@ function setupEventListeners() {
     if (settingsForm) settingsForm.addEventListener('submit', saveSettings);
     if (reloadSettingsBtn) reloadSettingsBtn.addEventListener('click', loadSettings);
 
+    // Admins
+    if (addAdminBtn) addAdminBtn.addEventListener('click', openAddAdminModal);
+    if (refreshAdminsBtn) refreshAdminsBtn.addEventListener('click', loadAdmins);
+    if (adminForm) adminForm.addEventListener('submit', submitAdminForm);
+    if (closeAdminModal) closeAdminModal.addEventListener('click', closeAdminModalHandler);
+    if (cancelAdminBtn) cancelAdminBtn.addEventListener('click', closeAdminModalHandler);
+
     // Form
     knowledgeForm.addEventListener('submit', handleSubmit);
     answerInput.addEventListener('input', updateCharCounter);
@@ -196,6 +219,12 @@ function setupEventListeners() {
     deleteModal.addEventListener('click', (e) => {
         if (e.target === deleteModal) closeDeleteModalHandler();
     });
+
+    if (adminModal) {
+        adminModal.addEventListener('click', (e) => {
+            if (e.target === adminModal) closeAdminModalHandler();
+        });
+    }
 }
 
 // ========== Navigation ==========
@@ -213,7 +242,191 @@ function switchSection(sectionName) {
     if (sectionName === 'settings') {
         loadSettings();
     }
+
+    if (sectionName === 'admins') {
+        loadAdmins();
+    }
 }
+
+// ========== ADMINS (Quản trị viên) ==========
+async function loadAdmins() {
+    try {
+        if (!adminsTableBody) return;
+        if (adminsLoadedOnce && !document.getElementById('admins-section')?.classList.contains('active')) return;
+
+        if (refreshAdminsBtn) {
+            refreshAdminsBtn.disabled = true;
+            refreshAdminsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải...';
+        }
+
+        adminsTableBody.innerHTML = `
+            <tr class="loading-row">
+                <td colspan="4">
+                    <div class="loading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        Đang tải dữ liệu...
+                    </div>
+                </td>
+            </tr>
+        `;
+
+        const response = await fetch(`${API_BASE}/admins`, { headers: getAuthHeaders() });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || 'Admins error');
+
+        adminsData = result.data || [];
+        adminsLoadedOnce = true;
+        renderAdmins(adminsData);
+        showToast('Đã nạp danh sách admin', 'success');
+    } catch (e) {
+        console.error('Admins load error:', e);
+        if (adminsTableBody) {
+            adminsTableBody.innerHTML = `
+                <tr>
+                    <td colspan="4" style="padding:20px; color: var(--text-light);">
+                        Lỗi khi tải danh sách admin
+                    </td>
+                </tr>
+            `;
+        }
+        showToast('Lỗi khi tải danh sách admin', 'error');
+    } finally {
+        if (refreshAdminsBtn) {
+            refreshAdminsBtn.disabled = false;
+            refreshAdminsBtn.innerHTML = '<i class="fas fa-sync"></i> Làm mới';
+        }
+    }
+}
+
+function renderAdmins(list) {
+    if (!adminsTableBody) return;
+    if (!list || list.length === 0) {
+        adminsTableBody.innerHTML = `
+            <tr>
+                <td colspan="4" style="padding:20px; color: var(--text-light);">
+                    Chưa có admin nào
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    adminsTableBody.innerHTML = list.map((a, idx) => {
+        const created = a.createdAt ? formatDate(a.createdAt) : '';
+        return `
+            <tr>
+                <td>${idx + 1}</td>
+                <td><strong>${escapeHtml(a.username || '')}</strong></td>
+                <td>${created}</td>
+                <td>
+                    <button class="btn-icon btn-edit" title="Sửa" onclick="openEditAdminModal('${a.id}')">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-icon btn-delete" title="Xóa" onclick="deleteAdmin('${a.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function openAddAdminModal() {
+    if (!adminModal) return;
+    adminModalTitle.textContent = 'Thêm quản trị viên';
+    adminEditId.value = '';
+    adminUsername.value = '';
+    adminPassword.value = '';
+    adminModal.classList.add('show');
+}
+
+window.openEditAdminModal = function openEditAdminModal(id) {
+    const item = adminsData.find(x => x.id === id);
+    if (!item || !adminModal) return;
+    adminModalTitle.textContent = 'Cập nhật quản trị viên';
+    adminEditId.value = item.id;
+    adminUsername.value = item.username || '';
+    adminPassword.value = '';
+    adminModal.classList.add('show');
+};
+
+function closeAdminModalHandler() {
+    if (!adminModal) return;
+    adminModal.classList.remove('show');
+}
+
+async function submitAdminForm(e) {
+    e.preventDefault();
+    try {
+        const id = adminEditId.value;
+        const username = adminUsername.value.trim();
+        const password = adminPassword.value;
+
+        const payload = { username };
+        if (password && password.trim()) payload.password = password;
+
+        if (!username) throw new Error('Thiếu username');
+        if (!id && (!password || password.length < 6)) throw new Error('Password phải >= 6 ký tự');
+
+        if (saveAdminBtn) {
+            saveAdminBtn.disabled = true;
+            saveAdminBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang lưu...';
+        }
+
+        const url = id ? `${API_BASE}/admins/${id}` : `${API_BASE}/admins`;
+        const method = id ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+            method,
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || 'Save admin failed');
+
+        showToast(result.message || 'Đã lưu admin', 'success');
+        closeAdminModalHandler();
+        adminsLoadedOnce = false;
+        await loadAdmins();
+    } catch (e2) {
+        console.error('Save admin error:', e2);
+        showToast(e2.message || 'Lỗi khi lưu admin', 'error');
+    } finally {
+        if (saveAdminBtn) {
+            saveAdminBtn.disabled = false;
+            saveAdminBtn.innerHTML = '<i class="fas fa-save"></i> Lưu lại';
+        }
+    }
+}
+
+window.deleteAdmin = async function deleteAdmin(id) {
+    const item = adminsData.find(x => x.id === id);
+    if (!item) return;
+
+    customConfirm({
+        title: 'Xác nhận xóa admin',
+        message: `Bạn có chắc muốn xóa admin "${item.username}"?`,
+        icon: 'warning',
+        confirmText: 'Xóa',
+        confirmClass: 'btn-danger',
+        onConfirm: async () => {
+            try {
+                const response = await fetch(`${API_BASE}/admins/${id}`, {
+                    method: 'DELETE',
+                    headers: getAuthHeaders()
+                });
+                const result = await response.json();
+                if (!result.success) throw new Error(result.error || 'Delete failed');
+                showToast(result.message || 'Đã xóa admin', 'success');
+                adminsLoadedOnce = false;
+                await loadAdmins();
+            } catch (err) {
+                console.error('Delete admin error:', err);
+                showToast(err.message || 'Lỗi khi xóa admin', 'error');
+            }
+        }
+    });
+};
 
 // ========== STATS (Báo cáo) ==========
 async function loadStats() {

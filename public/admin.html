@@ -49,6 +49,10 @@
                     <i class="fas fa-cog"></i>
                     <span>Cài đặt</span>
                 </a>
+                <a href="#" class="nav-item" data-section="admins">
+                    <i class="fas fa-user-shield"></i>
+                    <span>Quản trị viên</span>
+                </a>
             </nav>
         </aside>
 
@@ -246,7 +250,7 @@
                     <div style="padding: 15px; border-bottom: 1px solid var(--border-color);">
                         <strong>Cấu hình hệ thống</strong>
                         <div style="color: var(--text-light); font-size: 13px; margin-top: 5px;">
-                            Lưu vào <code>src/database/settings.json</code>. Thay đổi có hiệu lực ngay.
+                            Lưu trong MongoDB. Thay đổi có hiệu lực ngay.
                         </div>
                     </div>
                     <form id="settingsForm" style="padding: 20px;">
@@ -318,6 +322,54 @@
                             </button>
                         </div>
                     </form>
+                </div>
+            </section>
+
+            <!-- Admins Section -->
+            <section id="admins-section" class="content-section">
+                <div class="section-header">
+                    <h2>Quản lý quản trị viên</h2>
+                </div>
+
+                <div class="actions-bar">
+                    <div class="left-actions">
+                        <button class="btn btn-primary" id="addAdminBtn">
+                            <i class="fas fa-user-plus"></i>
+                            Thêm admin
+                        </button>
+                        <button class="btn btn-secondary" id="refreshAdminsBtn">
+                            <i class="fas fa-sync"></i>
+                            Làm mới
+                        </button>
+                    </div>
+                    <div class="right-actions">
+                        <small style="color: var(--text-light);">
+                            Không thể xoá admin cuối cùng / không thể tự xoá tài khoản đang đăng nhập.
+                        </small>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="knowledge-table">
+                        <thead>
+                            <tr>
+                                <th width="10%">#</th>
+                                <th width="45%">Username</th>
+                                <th width="25%">Ngày tạo</th>
+                                <th width="20%">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminsTableBody">
+                            <tr class="loading-row">
+                                <td colspan="4">
+                                    <div class="loading">
+                                        <i class="fas fa-spinner fa-spin"></i>
+                                        Đang tải dữ liệu...
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </section>
         </main>
@@ -406,6 +458,49 @@
                     <i class="fas fa-trash"></i>
                     Xóa
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Admin Management -->
+    <div id="adminModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="adminModalTitle">Thêm quản trị viên</h2>
+                <button class="close-btn" id="closeAdminModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="adminForm">
+                    <div class="form-group">
+                        <label for="adminUsername">
+                            <i class="fas fa-user"></i>
+                            Username
+                        </label>
+                        <input id="adminUsername" type="text" minlength="3" required placeholder="vd: admin2">
+                    </div>
+                    <div class="form-group">
+                        <label for="adminPassword">
+                            <i class="fas fa-key"></i>
+                            Mật khẩu
+                        </label>
+                        <input id="adminPassword" type="password" placeholder=">= 6 ký tự">
+                        <small style="color: var(--text-light); display:block; margin-top:6px;">
+                            Khi sửa: để trống nếu không đổi mật khẩu.
+                        </small>
+                    </div>
+                    <input type="hidden" id="adminEditId">
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancelAdminBtn">
+                            Hủy
+                        </button>
+                        <button type="submit" class="btn btn-primary" id="saveAdminBtn">
+                            <i class="fas fa-save"></i>
+                            Lưu lại
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

@@ -2,19 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import Fuse from 'fuse.js';
 import { loadKnowledgeBase, loadSettings } from './_utils.js';
 
-// Gemini model (simple config for serverless, dùng settings nếu có)
-const settings = loadSettings();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({
-  model: settings.ai.model,
-  systemInstruction: settings.ai.systemInstruction
-});
-
-// Fuzzy search config (serverless)
-const fuseOptions = {
-  keys: ['keyword'],
-  threshold: settings.fuzzy.threshold ?? 0.4
-};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -30,8 +18,18 @@ export default async function handler(req, res) {
       return;
     }
 
-    // 1. Thử tìm trong DB local (read-only trên serverless)
-    const knowledgeBase = loadKnowledgeBase();
+    const settings = await loadSettings();
+    const model = genAI.getGenerativeModel({
+      model: settings.ai.model,
+      systemInstruction: settings.ai.systemInstruction
+    });
+    const fuseOptions = {
+      keys: ['keyword'],
+      threshold: settings.fuzzy?.threshold ?? 0.4
+    };
+
+    // 1. Thử tìm trong MongoDB knowledge base
+    const knowledgeBase = await loadKnowledgeBase();
     const fuse = new Fuse(knowledgeBase, fuseOptions);
     const searchResult = fuse.search(message);
 
@@ -42,11 +40,19 @@ export default async function handler(req, res) {
     }
 
     // 2. Nếu không có trong DB → gọi Gemini
+    if (!settings.ai?.enabled) {
+      res.status(200).json({
+        reply:
+          'Mình chưa có câu trả lời phù hợp trong cơ sở dữ liệu. Bạn vui lòng liên hệ phòng đào tạo hoặc đặt câu hỏi cụ thể hơn để mình bổ sung nhé.',
+        source: 'default'
+      });
+      return;
+    }
+
     const chat = model.startChat({ history: [] });
     const result = await chat.sendMessage(message);
     const text = result.response.text();
 
-    // Lưu ý: trên Vercel không nên ghi file, nên bỏ phần ghi DB
     res.status(200).json({ reply: text, source: 'Google Gemini AI' });
   } catch (error) {
     console.error('Lỗi /api/chat:', error);
