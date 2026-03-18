@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Fuse from 'fuse.js';
-import { loadKnowledgeBase, loadSettings } from './_utils.js';
+import { loadKnowledgeBase, loadSettings, createKnowledgeEntry } from './_utils.js';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
