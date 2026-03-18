@@ -53,6 +53,8 @@ export default async function handler(req, res) {
     const result = await chat.sendMessage(message);
     const text = result.response.text();
 
+    await createKnowledgeEntry({ keyword: message, answer: text });
+
     res.status(200).json({ reply: text, source: 'Google Gemini AI' });
   } catch (error) {
     console.error('Lỗi /api/chat:', error);
